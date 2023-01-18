@@ -71,9 +71,17 @@ def relaxation(tau: float, t1: float, t2: float):
 
 # Gradient operator (S)
 def grad_shift(delta_k: float, omega: np.ndarray):
-    dk = round(delta_k)
-    if dk < np.finfo(float).eps:
+    # no shifting if small gradient values (0.0)
+    if delta_k < np.finfo(float).eps:
         return omega
+
+    # we always round up to next integer value: want to calculate whole state shifts.
+    # if gradient moment doesnt allow for whole state shift we take the next highest and
+    # extrapolate the state afterwards
+    dk = np.ceil(delta_k)
+    # calculate how we overestimate the state, this fraction of the state we are using later
+    interpolate_fraction = delta_k / dk
+    dk = int(dk)    # cast
 
     # define shift
     def shift_right(arr_ax, int_shift):
@@ -103,7 +111,15 @@ def grad_shift(delta_k: float, omega: np.ndarray):
         # fill zeroth state of minus
         tmp_result[1, 0] = np.conjugate(tmp_result[0, 0])
     tmp_result[2] = omega[2]
-    return tmp_result
+
+    # we calculated the state.
+    # if delta_k / dk = 1 -> delta k is whole state shift. nothing needed
+    if np.abs(interpolate_fraction - 1.0) < np.finfo(float).eps:
+        return tmp_result
+
+    # else we need to interpolate the states
+    interp_result = omega + interpolate_fraction * np.subtract(tmp_result, omega)
+    return interp_result
 
 
 if __name__ == '__main__':
@@ -115,6 +131,12 @@ if __name__ == '__main__':
     q_state_matrix[:, 1] = np.array([0.1 + 0.2j, 0.1 - 0.2j, 0.1])
     logModule.info(f"start q matrix \n{q_state_matrix}")
     res = grad_shift(1.0, q_state_matrix)
+    logModule.info(f"result: \n{res}")
+
+    logModule.info(f"interpolate noninteger shift {1.6}, start: \n{res}")
+    logModule.info(f"shift {1.0}: \n{grad_shift(1, res)}")
+    logModule.info(f"shift {2.0}: \n{grad_shift(2, res)}")
+    res = grad_shift(1.6, res)
     logModule.info(f"result: \n{res}")
 
     r = rf_rotation(90, 90)
