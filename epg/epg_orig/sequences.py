@@ -277,3 +277,15 @@ def make_bssfp_sequence_alt(alpha, N, tr, t1t2=(0, 0), dk=1):
     rf.extend(int((N - 1) / 2) * [(0, alpha), (0, -alpha)])
 
     return epg.Sequence(rf, grad, events, time, t1t2, 'bSSFP_alt')
+
+
+if __name__ == '__main__':
+    # Make a predefined sequence
+    S = make_tse_sequence(alpha=120, N=5, esp=10, use_y90=True, t1t2=(1500, 35))
+    # Initialize & run EPG
+    epg1 = epg.EPG(S)
+    epg1.simulate()
+    # Displays EPG diagram
+    epg1.display()
+    # Displays echo strengths
+    epg1.plot_echoes()

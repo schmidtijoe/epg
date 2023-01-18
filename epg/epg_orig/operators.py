@@ -1,28 +1,63 @@
-import math as m
-import cmath as cm
 import numpy as np
 
 
 # Important methods for EPG operations
 # RF operator (T)
-def rf_rotation(phi, alpha):
-    alpha = m.radians(alpha)
-    phi = m.radians(phi)
-    R = [[(m.cos(alpha / 2)) ** 2, cm.exp(2 * 1j * phi) * (m.sin(alpha / 2) ** 2),
-          -1j * cm.exp(1j * phi) * m.sin(alpha)],
-         [cm.exp(-2 * 1j * phi) * m.sin(alpha / 2) ** 2, m.cos(alpha / 2) ** 2, 1j * cm.exp(-1j * phi) * m.sin(alpha)],
-         [-1j * 0.5 * cm.exp(-1j * phi) * m.sin(alpha), 1j * 0.5 * cm.exp(1j * phi) * m.sin(alpha), m.cos(alpha)]]
-    return np.matrix(R)
+def rf_rotation(flip_angle: float, phase: float):
+    """
+
+    Parameters
+    ----------
+    flip_angle: rf flip angle in deg
+    phase: rf phase in deg
+
+    Returns rotation matrix
+    -------
+
+    """
+    flip_angle = np.radians(flip_angle)
+    phase = np.radians(phase)
+    r = [
+        [
+            (np.cos(flip_angle / 2)) ** 2,
+            np.exp(2 * 1j * phase) * (np.sin(flip_angle / 2) ** 2),
+            -1j * np.exp(1j * phase) * np.sin(flip_angle)
+        ],
+        [
+            np.exp(-2 * 1j * phase) * np.sin(flip_angle / 2) ** 2,
+            np.cos(flip_angle / 2) ** 2,
+            1j * np.exp(-1j * phase) * np.sin(flip_angle)
+        ],
+        [
+            -1j * 0.5 * np.exp(-1j * phase) * np.sin(flip_angle),
+            1j * 0.5 * np.exp(1j * phase) * np.sin(flip_angle),
+            np.cos(flip_angle)
+        ]
+    ]
+    return np.matrix(r)
 
 
 # Relaxation operator (E)
-def relaxation(tau, t1, t2, omega):
+def relaxation(tau: float, t1: float, t2: float, omega):
+    """
+
+    Parameters
+    ----------
+    tau: time for relaxation [s]
+    t1: t1 param [s]
+    t2: t2 param [s]
+    omega:
+
+    Returns
+    -------
+
+    """
     if t1 != 0 and t2 != 0:
-        e1 = m.exp(-tau / t1)
-        e2 = m.exp(-tau / t2)
-        relax_mat = np.matrix([[e2, 0, 0], [0, e2, 0], [0, 0, e1]])
+        e1 = np.exp(-tau / t1)
+        e2 = np.exp(-tau / t2)
+        relax_mat = np.array([[e2, 0, 0], [0, e2, 0], [0, 0, e1]])
         omega_new = relax_mat * omega
-        omega_new[:, 0] = omega_new[:, 0] + np.matrix([[0], [0], [1 - e1]])
+        omega_new[:, 0] = omega_new[:, 0] + np.array([[0], [0], [1 - e1]])
     else:
         omega_new = omega
 
