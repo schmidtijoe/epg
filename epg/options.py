@@ -35,8 +35,8 @@ class SeqConfig:
     excitationFA: float = 90.0
     excitationRfPhase: float = 90.0         # [°]
     excitationGradRephase: float = 20.0     # [mT/m]
-    refocusingFA: List = dc.field(default_factory=lambda: [140.0])  # °
-    refocusingRfPhase: List = dc.field(default_factory=lambda: [140.0])  # °
+    refocusingFA: List = dc.field(default_factory=lambda: [120.0])  # °
+    refocusingRfPhase: List = dc.field(default_factory=lambda: [0.0])  # °
     refocusingGradCrusher: float = 20.0     # [mT/m]
     refocusingGradSliceSpoiling: float = 30.0   # [mT/m]
 

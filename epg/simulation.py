@@ -18,13 +18,7 @@ class EPG:
             self.end_time: float = start_time + duration
 
         def get_state_size(self):
-            max_size = self.matrix.shape[-1]
-            size = 0
-            for size_counter in range(max_size):
-                test_val = np.abs(self.matrix[:, size_counter])
-                if np.array(test_val > np.finfo(float).eps).any():
-                    size += 1
-            return size
+            return self.matrix.shape[-1]
 
     def __init__(self, seq: sequence.Sequence):
         etl = seq.params.ETL
@@ -44,7 +38,7 @@ class EPG:
     def _check_q_size(self):
         # we just look if the last columns is different from 0 then we can suspect that
         # the matrix is filled all the way and more space would've been needed
-        if self.q_matrix[:, -1].any() > 0:
+        if np.array(np.abs(self.q_matrix[:, -1]) > np.finfo(float).eps).any():
             err = f"allocated q matrix completely filled"
             logModule.error(err)
             # handle
@@ -52,18 +46,16 @@ class EPG:
             self.q_matrix = np.concatenate([self.q_matrix, np.zeros([3, 5])], axis=-1)
 
     def _add_to_history(self, desc: str, time: float, duration: float):
-        size = 0
-        while self.q_matrix[:, size].any() > np.finfo(float).eps:
-            size += 1
+        size = self.get_q_size()
         tmp_state = self.TempState(matrix=self.q_matrix[:, :size], start_time=time, duration=duration, desc=desc)
         self.q_history.append(tmp_state)
         self.history_len += 1
 
     def get_q_size(self) -> int:
-        size = 0
-        while np.array(np.abs(self.q_matrix[:, size]) > np.finfo(float).eps).any():
-            size += 1
-        return size
+        size = self.q_matrix.shape[-1] - 1
+        while not np.array(np.abs(self.q_matrix[:, size]) > np.finfo(float).eps).any():
+            size -= 1
+        return size + 1
 
     def get_history(self) -> list:
         return self.q_history
@@ -185,6 +177,7 @@ class EPG:
                     (time_array[start_idx + int((end_idx - start_idx) / 2) + 5], 0.9 * event.flip_angle / np.pi),
                     color=rf_color
                 )
+
             if tmp_state.desc == "grad":
                 shift = event.moment
                 if last_state.desc == "grad":
@@ -206,8 +199,7 @@ class EPG:
                 if np.abs(tmp_state.matrix[0, 0]) > np.finfo(float).eps:
                     ax_epg.plot(time_array[start_idx:end_idx], np.linspace(- shift, 0, end_idx - start_idx),
                                 color=grad_color)
-                for n in np.arange(1, tmp_state.matrix.shape[-1]):
-
+                for n in np.arange(1, tmp_state.get_state_size()):
                     if np.abs(tmp_state.matrix[0, n]) > np.finfo(float).eps:
                         ax_epg.plot(time_array[start_idx:end_idx], np.linspace(n - shift, n, end_idx - start_idx),
                                     color=grad_color)
@@ -273,11 +265,26 @@ class EPG:
 
     def plot_echoes(self):
         # variables
-        # time_array =
+        plt.style.use('ggplot')
+        color='#5c25ba'
+        echo_times = np.arange(self.seq.params.ETL+1) * self.seq.params.ESP
+        # get echoes
+        echo_vals = [1.0]
+        for ev_idx in range(self.history_len):
+            tmp_state = self.get_history_state(ev_idx)
+            if tmp_state.desc == "echo":
+                echo_vals.append(np.abs(tmp_state.matrix[0, 0]))
+        echo_vals = np.array(echo_vals)
 
         fig = plt.figure(figsize=(12, 4))
         ax = fig.add_subplot()
+        ax.set_xlabel('Echo Time [ms]')
+        ax.set_ylabel('Normalized Echo Intensity')
 
+        ax.plot(echo_times, echo_vals, color=color)
+        ax.scatter(echo_times[1:], echo_vals[1:], color=color, marker='o')
+
+        plt.show()
 
 
 if __name__ == '__main__':
@@ -287,4 +294,5 @@ if __name__ == '__main__':
     epg = EPG(semc_seq)
     epg.simulate()
     epg.plot_epg()
+    epg.plot_echoes()
     logModule.info("done")
