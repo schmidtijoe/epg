@@ -139,6 +139,15 @@ class Grad(Event):
             moment = utils.GlobalValues().gamma_hz * amplitude * duration * 1e-3  # cast to sec
         return moment, amplitude
 
+    @staticmethod
+    def calculate_min_duration(shift: float = 0.0, voxel_dim_extend: float = 1.0):
+        # to reach shift we need a certain grad moment
+        moment = shift / voxel_dim_extend * 1e3
+        # set amplitude to system max: 39 mT/m
+        amplitude = 0.039
+        # return duration in ms
+        return moment / amplitude / utils.GlobalValues().gamma_hz * 1e3
+
     def _operator(self, q_mat: np.ndarray):
         return op.grad_shift(self.phase_shift, q_mat)
 
