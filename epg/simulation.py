@@ -283,11 +283,18 @@ class EPG:
         # variables
         plt.style.use('ggplot')
         color = '#5c25ba'
+        color_2 = '#C95711'
         echo_times = np.arange(self.seq.params.ETL + 1) * self.seq.params.ESP
+        # toggle first rf
+        exci_rf = False
         # get echoes
-        echo_vals = [1.0]
+        echo_vals = []
         for ev_idx in range(self.history_len):
             tmp_state = self.get_history_state(ev_idx)
+            if tmp_state.desc == "rf" and not exci_rf:
+                # add initial excited magnitude
+                echo_vals.append(np.abs(tmp_state.matrix[0, 0]))
+                exci_rf = True
             if tmp_state.desc == "echo":
                 echo_vals.append(np.abs(tmp_state.matrix[0, 0]))
         echo_vals = np.array(echo_vals)
@@ -296,8 +303,12 @@ class EPG:
         ax = fig.add_subplot()
         ax.set_xlabel('Echo Time [ms]')
         ax.set_ylabel('Normalized Echo Intensity')
+        ax.set_ylim(0, 1.1)
+        # ax.set_xlim(0, echo_times[-1]+np.diff(echo_times)[-1])
 
         ax.plot(echo_times, echo_vals, color=color)
+        ax.annotate("excitation efficiency", (np.diff(echo_times)[0]/4, echo_vals[0]), color=color_2)
+        ax.scatter(echo_times[0], echo_vals[0], color=color_2)
         ax.scatter(echo_times[1:], echo_vals[1:], color=color, marker='o')
 
         plt.show()
