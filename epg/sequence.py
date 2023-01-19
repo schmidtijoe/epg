@@ -44,7 +44,7 @@ def create_semc(params: opt.SeqParamsSEMC = opt.SeqParamsSEMC()):
     logModule.debug("excitation")
     # excitation
     exc_rf =evts.RF(
-        flip_angle=params.excitationFA,
+        flip_angle=params.B1*params.excitationFA,
         phase=params.excitationRfPhase,
         duration=params.excitationDuration,
         rephase_offset=params.excitationRephaseOffset
@@ -59,9 +59,18 @@ def create_semc(params: opt.SeqParamsSEMC = opt.SeqParamsSEMC()):
     logModule.debug("refocus etl")
     for loop_idx in range(params.ETL):
         # grad crushing
+        if params.refocusingGradCrusherAdjustT:
+            duration = evts.Grad().calculate_min_duration(params.refocusingGradCrusher, params.sliceThickness)
+            params.refocusingGradCrushDuration = duration
+        if params.refocusingGradCrusher < 4.1:
+            moment = params.refocusingGradCrusher / params.sliceThickness * 1e3
+        else:
+            moment = 0.0
         crusher = evts.Grad().create_rect_grad(
+                moment=moment,
                 amplitude=1e-3*params.refocusingGradCrusher,    # cast to T/m
-                duration=params.refocusingGradCrushDuration
+                duration=params.refocusingGradCrushDuration,
+                voxel_dim_extend=params.sliceThickness
         )
         seq.add_event(
             crusher,
@@ -71,7 +80,7 @@ def create_semc(params: opt.SeqParamsSEMC = opt.SeqParamsSEMC()):
 
         # refocusing
         ref_rf = evts.RF(
-                flip_angle=params.refocusingFA[loop_idx],
+                flip_angle=params.B1*params.refocusingFA[loop_idx],
                 phase=params.refocusingRfPhase[loop_idx],
                 duration=params.refocusingDuration
         )
@@ -90,4 +99,5 @@ def create_semc(params: opt.SeqParamsSEMC = opt.SeqParamsSEMC()):
 
         # delay
         seq.add_event(delay, start_time=params.ESP * (loop_idx + 1))
+
     return seq
