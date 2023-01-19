@@ -13,7 +13,7 @@ class FileConfig(Serializable):
     configFile: str = field(default="", alias=["-c"])
     outputPath: str = field(default="", alias=["-o"])
     visualize: bool = True
-    debug: bool = False
+    debug: bool = True
 
     sequenceType: str = field(default="semc", alias=["-s"], choices=["semc", "pulseq"])
 
@@ -29,29 +29,46 @@ class FileConfig(Serializable):
 
 
 @dc.dataclass
-class SeqConfig(Serializable):
+class SeqParamsSEMC(Serializable):
+    """
+    This class provides the interfacing parameters for semc sequence creation.
+    Designing other sequences needs a variant of this class for interfacing
+    """
     ESP: float = 10.0                           # [ms]
     ETL: int = 7
-    T1: float = 1500                            # [ms]
+    T1: float = 1500.0                            # [ms]
     T2: float = 35.0                            # [ms]
 
     excitationFA: float = 90.0                  # [°]
     excitationRfPhase: float = 90.0             # [°]
-    excitationGradRephase: float = 20.0         # [mT/m]
+    excitationDuration: float = 2.0             # [ms]
+    # excitationGradRephase: float = 20.0         # [mT/m]
+    # excitationGradReDuration: float = 0.8       # [ms]
     excitationRephaseOffset: float = 0.0        # [°]
 
-    refocusingFA: List = dc.field(default_factory=lambda: [120.0])          # [°]
+    refocusingFA: List = dc.field(default_factory=lambda: [90.0])          # [°]
     refocusingRfPhase: List = dc.field(default_factory=lambda: [0.0])       # [°]
+    refocusingDuration: float = 3.0             # [ms]
     refocusingGradCrusher: float = 20.0         # [mT/m]
+    refocusingGradCrushDuration: float = 0.8    # [ms]
     refocusingGradSliceSpoiling: float = 30.0   # [mT/m]
+    refocusingGradSpoilDuration: float = 0.8    # [ms]
 
     sliceThickness: float = 0.7                 # [mm]
+
+    def __post_init__(self):
+        while self.refocusingFA.__len__() < self.ETL:
+            self.refocusingFA.append(self.refocusingFA[-1])
+        logModule.debug(f"Refoc. FA List: {self.refocusingFA}")
+        while self.refocusingRfPhase.__len__() < self.ETL:
+            self.refocusingRfPhase.append(self.refocusingRfPhase[-1])
+        logModule.debug(f"Refoc. Phase List: {self.refocusingRfPhase}")
 
 
 @dc.dataclass
 class Config:
     config: FileConfig = FileConfig()
-    params: SeqConfig = SeqConfig()
+    params: SeqParamsSEMC = SeqParamsSEMC()
 
     @classmethod
     def load(cls, path):
@@ -63,7 +80,7 @@ class Config:
             with open(path, "r") as j_file:
                 load_dict = json.load(j_file)
             Conf.config = FileConfig.from_dict(load_dict["config"])
-            Conf.params = SeqConfig.from_dict(load_dict["params"])
+            Conf.params = SeqParamsSEMC.from_dict(load_dict["params"])
         else:
             raise ValueError(f"{path} file ending not recognized!")
         return Conf
@@ -81,7 +98,7 @@ class Config:
         # This is for the case that we load a config file and provide additional cmd line inputs to overwrite
         # the config from the file. This approach fails if the additional info is default value
         d_default_config = FileConfig().to_dict()
-        d_default_params = SeqConfig().to_dict()
+        d_default_params = SeqParamsSEMC().to_dict()
 
         d_nd_config = prog_args.config
         d_nd_params = prog_args.params
@@ -101,7 +118,7 @@ def create_cmd_parser() -> (ArgumentParser, ArgumentParser.parse_args):
         """
     parser = ArgumentParser(prog='epg')
     parser.add_arguments(FileConfig, dest="config")
-    parser.add_arguments(SeqConfig, dest="params")
+    parser.add_arguments(SeqParamsSEMC, dest="params")
     args = parser.parse_args()
 
     return parser, args

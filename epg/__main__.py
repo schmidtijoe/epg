@@ -13,9 +13,12 @@ import options as opt
 import sequence
 import simulation
 
+logging.getLogger('matplotlib.font_manager').disabled = True
+logging.getLogger('simple_parsing').disabled = True
+
 
 def main(prog_opts: opt.Config):
-    semc_seq = sequence.Sequence.create_semc(params=prog_opts.params)
+    semc_seq = sequence.create_semc(params=prog_opts.params)
     epg = simulation.EPG(semc_seq)
     logging.info("Start Simulation")
     epg.simulate()
@@ -42,3 +45,4 @@ if __name__ == '__main__':
         main(opts)
     except (ValueError, AttributeError) as e:
         logging.error(e)
+        parser.print_usage()

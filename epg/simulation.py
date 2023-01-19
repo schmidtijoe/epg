@@ -6,6 +6,7 @@ import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mpc
+import matplotlib.patheffects as path_effects
 
 logModule = logging.getLogger(__name__)
 
@@ -91,10 +92,12 @@ class EPG:
         echo_array = np.full_like(time_array, np.nan)
 
         # plotting
-        fig = plt.figure(figsize=(12, 6))
+        fig = plt.figure(figsize=(12, 8))
         gs = fig.add_gridspec(2, 1, height_ratios=[2.5, 1])
         ax_epg = fig.add_subplot(gs[0])
+        ax_epg.set_facecolor('#D1C7C5')
         ax_seq = fig.add_subplot(gs[1])
+        ax_seq.set_facecolor('#D1C7C5')
         ax_epg.set_ylabel(f"$F_n, Z_n$")
         ax_epg.set_xticklabels([])
         # epgs
@@ -108,8 +111,10 @@ class EPG:
                 m = np.max(val)
                 if m > vmax:
                     vmax = m
-        norm = mpc.Normalize(vmin=0.0, vmax=1.2*vmax, clip=True)
+        norm = mpc.Normalize(vmin=0.0, vmax=1.2 * vmax, clip=True)
         mapper = cm.ScalarMappable(norm=norm, cmap=cm.gist_heat)
+        color_lines = cm.nipy_spectral(np.linspace(0, 1, 2 * state_spread_size + 1))
+        cl_half = int(color_lines.__len__() / 2)
 
         # keep some indexes
         start_idx = 0
@@ -140,7 +145,7 @@ class EPG:
                 ax_epg.scatter(time_array[start_idx + int((end_idx - start_idx) / 2)], 0.0, marker='o', s=10,
                                color=rf_color)
                 # plot state swaps
-                for n in range(last_state.matrix.shape[-1]):
+                for n in range(last_state.get_state_size()):
                     if np.abs(last_state.matrix[0, n]) > utils.GlobalValues().eps:
                         # val = np.abs(tmp_state.matrix[0, n] - tmp_state.matrix[1, n])
                         ax_epg.plot(
@@ -154,7 +159,7 @@ class EPG:
                                 color=rf_color,
                                 alpha=0.6
                             )
-                    if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps :
+                    if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps:
                         ax_epg.plot(
                             time_array[start_idx:end_idx], np.linspace(-n, -n, end_idx - start_idx),
                             linestyle="dashed",
@@ -180,36 +185,45 @@ class EPG:
                 )
 
             if tmp_state.desc == "grad":
-                shift = event.moment
+                # check for whole step shifts
+                shift = event.phase_shift
+                if np.abs(int(shift) - shift) > utils.GlobalValues().eps:
+                    fractional_shift = True
+                else:
+                    fractional_shift = False
+                shift = np.ceil(shift)
+                # plot lines in between gradients
                 if last_state.desc == "grad":
                     # in between
-                    if np.abs(last_state.matrix[0, 0]) > utils.GlobalValues().eps:
-                        ax_epg.plot(time_array[last_idx:start_idx], np.linspace(0, 0, start_idx - last_idx),
-                                    color=grad_color)
-                    for n in np.arange(1, last_state.matrix.shape[-1]):
+                    for n in range(last_state.get_state_size()):
                         if np.abs(last_state.matrix[0, n]) > utils.GlobalValues().eps:
                             ax_epg.plot(time_array[last_idx:start_idx],
                                         np.linspace(n, n, start_idx - last_idx),
-                                        color=grad_color, linestyle="dashed")
-                        if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps:
+                                        color=color_lines[cl_half + n], linestyle="dashed")
+                        if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps and n > 0:
                             ax_epg.plot(time_array[last_idx:start_idx],
                                         np.linspace(-n, -n, start_idx - last_idx),
-                                        color=grad_color, linestyle="dashed")
+                                        color=color_lines[cl_half - n], linestyle="dashed")
 
-                # plot epg
-                if np.abs(tmp_state.matrix[0, 0]) > utils.GlobalValues().eps:
-                    ax_epg.plot(time_array[start_idx:end_idx], np.linspace(- shift, 0, end_idx - start_idx),
-                                color=grad_color)
-                for n in np.arange(1, tmp_state.get_state_size()):
-                    if np.abs(tmp_state.matrix[0, n]) > utils.GlobalValues().eps:
-                        ax_epg.plot(time_array[start_idx:end_idx], np.linspace(n - shift, n, end_idx - start_idx),
-                                    color=grad_color)
-                    if np.abs(tmp_state.matrix[1, n]) > utils.GlobalValues().eps:
+                # plot epg gradient shift
+                for n in range(last_state.get_state_size()):
+                    if np.abs(last_state.matrix[0, n]) > utils.GlobalValues().eps:
+                        ax_epg.plot(time_array[start_idx:end_idx], np.linspace(n, n + shift, end_idx - start_idx),
+                                    color=color_lines[cl_half + n + 1])
+                        if fractional_shift:
+                            # fraction of state remains
+                            ax_epg.plot(time_array[start_idx:end_idx], np.linspace(n, n, end_idx - start_idx),
+                                        color=grad_color, linestyle='dotted', alpha=0.7)
+                    if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps and n > 0:
                         ax_epg.plot(time_array[start_idx:end_idx],
-                                    np.linspace(-n - 1, -n - 1 + shift, end_idx - start_idx),
-                                    color=grad_color)
+                                    np.linspace(-n, -n + shift, end_idx - start_idx),
+                                    color=color_lines[cl_half - n + 1])
+                        if fractional_shift:
+                            # fraction of state remains
+                            ax_epg.plot(time_array[start_idx:end_idx], np.linspace(-n, -n, end_idx - start_idx),
+                                        color=grad_color, linestyle='dotted', alpha=0.7)
                 # plot seq
-                val = - 0.6 * event.moment
+                val = - 0.6 * event.phase_shift
                 ramp_idx = int((end_idx - start_idx) / 8)
                 grad_array[start_idx:start_idx + ramp_idx] = np.linspace(0, val, ramp_idx)
                 grad_array[start_idx + ramp_idx:end_idx - ramp_idx] = val
@@ -223,30 +237,29 @@ class EPG:
                 # plot epg
                 echo_val = np.abs(tmp_state.matrix[0, 0])
                 ax_epg.scatter(time_array[start_idx], 0.0, marker='o', s=7, zorder=5, color=mapper.to_rgba(echo_val))
-                ax_epg.annotate(f"{echo_val:.3f}", (time_array[start_idx], 0.3), color=mapper.to_rgba(echo_val))
+                txt = ax_epg.annotate(f"{echo_val:.3f}", (time_array[start_idx], 0.3), color=mapper.to_rgba(echo_val))
+                txt.set_path_effects([path_effects.Stroke(linewidth=0.4, foreground='#A1501E'), path_effects.Normal()])
                 # plot seq
                 echo_array[start_idx] = 0.0
-                ax_seq.annotate("echo", (time_array[start_idx - int(num_samples / 100)], 0.1),
-                                color='#fa9016')
+                txt = ax_seq.annotate("echo", (time_array[start_idx - int(num_samples / 100)], 0.1),
+                                      color='#fa9016')
+                txt.set_path_effects([path_effects.Stroke(linewidth=0.4, foreground='#A1501E'), path_effects.Normal()])
 
             last_rf_idx = end_idx
 
         if last_state.desc == "grad":
             # in between
-            if np.abs(last_state.matrix[0, 0]) > utils.GlobalValues().eps:
-                ax_epg.plot(time_array[last_idx:start_idx], np.linspace(0, 0, start_idx - last_idx),
-                            color=grad_color)
-            for n in np.arange(1, last_state.matrix.shape[-1]):
+            for n in range(last_state.get_state_size()):
                 if np.abs(last_state.matrix[0, n]) > utils.GlobalValues().eps:
                     ax_epg.plot(time_array[last_idx:start_idx],
                                 np.linspace(n, n, start_idx - last_idx),
-                                color=grad_color, linestyle="dashed")
-                if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps:
+                                color=color_lines[cl_half + n], linestyle="dashed")
+                if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps and n > 0:
                     ax_epg.plot(time_array[last_idx:start_idx],
                                 np.linspace(-n, -n, start_idx - last_idx),
-                                color=grad_color, linestyle="dashed")
+                                color=color_lines[cl_half - n], linestyle="dashed")
 
-        ax_epg.plot(time_array[first_rf_idx:last_rf_idx], np.zeros(last_rf_idx-first_rf_idx),
+        ax_epg.plot(time_array[first_rf_idx:last_rf_idx], np.zeros(last_rf_idx - first_rf_idx),
                     zorder=3, alpha=0.6, color=rf_color, linestyle="dashed")
 
         # plot seq
@@ -261,14 +274,16 @@ class EPG:
         ax_seq.set_yticklabels([])
         ax_seq.set_xlabel("time [ms]")
 
+        ax_seq.set_xlim(time_array[0], time_array[last_rf_idx])
+        ax_epg.set_xlim(time_array[0], time_array[last_rf_idx])
         plt.tight_layout()
         plt.show()
 
     def plot_echoes(self):
         # variables
         plt.style.use('ggplot')
-        color='#5c25ba'
-        echo_times = np.arange(self.seq.params.ETL+1) * self.seq.params.ESP
+        color = '#5c25ba'
+        echo_times = np.arange(self.seq.params.ETL + 1) * self.seq.params.ESP
         # get echoes
         echo_vals = [1.0]
         for ev_idx in range(self.history_len):

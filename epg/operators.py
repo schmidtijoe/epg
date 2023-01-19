@@ -20,9 +20,9 @@ def rf_rotation(flip_angle: float, phase: float):
     -------
 
     """
-    if flip_angle > np.pi:
+    if flip_angle > 3 * np.pi / 2:
         flip_angle = np.radians(flip_angle)
-    if phase > np.pi:
+    if phase > 3 * np.pi / 2:
         phase = np.radians(phase)
     r = [
         [

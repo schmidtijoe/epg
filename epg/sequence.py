@@ -9,7 +9,7 @@ logModule = logging.getLogger(__name__)
 class Sequence:
     def __init__(
             self,
-            params: opt.SeqConfig = opt.SeqConfig()):
+            params: opt.SeqParamsSEMC = opt.SeqParamsSEMC()):
         self.params = params
         self._events = []
         self._timing = []
@@ -24,82 +24,70 @@ class Sequence:
     def get_event(self, idx: int):
         return self._events[idx], self._timing[idx]
 
-    @classmethod
-    def create_semc(cls, params: opt.SeqConfig = opt.SeqConfig()):
-        """Constructs SEMC sequence (repeated RF excitation with constant interval TR)
 
-        Inputs
-        ------
-        params : options.SeqConfig
-            sequence parameters
-        Returns
-        -------
-        seq : Sequence
-            Constructed sequence
+# -- sequence definitions --
+def create_semc(params: opt.SeqParamsSEMC = opt.SeqParamsSEMC()):
+    """Constructs SEMC sequence (repeated RF excitation with constant interval TR)
 
-        """
-        logModule.debug("__ set values __")
-        # set some constants
-        esp = params.ESP  # echo spacing in ms
-        grad_duration = 1.0  # grad duration in ms
-        rf_duration = 2.0
-        t1 = 1500.0  # t1 in ms
-        t2 = 35.0  # t2 in ms
-        exc_fa = params.excitationFA
-        exc_phase = params.excitationRfPhase
-        ref_fa = params.refocusingFA[0]
-        ref_phase = params.refocusingRfPhase[0]
+    Inputs
+    ------
+    params : options.SeqConfig
+        sequence parameters
+    Returns
+    -------
+    seq : Sequence
+        Constructed sequence
 
-        logModule.debug("__ build sequence __")
-        seq = cls(params=params)
-        logModule.debug("excitation")
-        # excitation
-        seq.add_event(evts.RF(flip_angle=exc_fa, phase=exc_phase, duration=rf_duration), start_time=0.0)
-        # delay
-        seq.add_event(evts.Relaxation(delay=esp / 2, t1=t1, t2=t2), start_time=rf_duration / 2)
+    """
+    logModule.debug("__ build sequence __")
+    seq = Sequence(params=params)
+    logModule.debug("excitation")
+    # excitation
+    exc_rf =evts.RF(
+        flip_angle=params.excitationFA,
+        phase=params.excitationRfPhase,
+        duration=params.excitationDuration,
+        rephase_offset=params.excitationRephaseOffset
+    )
+    seq.add_event(exc_rf, start_time=-params.excitationDuration / 2)
+
+    # delay
+    delay = evts.Relaxation(delay=params.ESP / 2, t1=params.T1, t2=params.T2)
+    seq.add_event(delay, start_time=0.0)
+
+    # loop through refocusing
+    logModule.debug("refocus etl")
+    for loop_idx in range(params.ETL):
         # grad crushing
-        crusher_moment = 1.0
-        seq.add_event(evts.Grad(moment=crusher_moment, duration=grad_duration),
-                      start_time=esp / 2 - grad_duration - rf_duration / 2)
+        crusher = evts.Grad().create_rect_grad(
+                amplitude=1e-3*params.refocusingGradCrusher,    # cast to T/m
+                duration=params.refocusingGradCrushDuration
+        )
+        seq.add_event(
+            crusher,
+            start_time=(0.5+loop_idx) * params.ESP -
+                       params.refocusingGradCrushDuration - params.refocusingDuration / 2
+        )
 
-        logModule.debug("refocus")
         # refocusing
-        seq.add_event(evts.RF(flip_angle=ref_fa, phase=ref_phase, duration=rf_duration),
-                      start_time=esp / 2 - rf_duration / 2)
+        ref_rf = evts.RF(
+                flip_angle=params.refocusingFA[loop_idx],
+                phase=params.refocusingRfPhase[loop_idx],
+                duration=params.refocusingDuration
+        )
+        seq.add_event(ref_rf, start_time=(loop_idx+0.5)*params.ESP - params.refocusingDuration / 2)
+
         # grad crushing
-        seq.add_event(evts.Grad(moment=crusher_moment, duration=grad_duration), start_time=esp / 2 + rf_duration / 2)
+        seq.add_event(crusher, start_time=(loop_idx+0.5)*params.ESP + params.refocusingDuration / 2)
+
         # delay
-        seq.add_event(evts.Relaxation(delay=esp / 2, t1=t1, t2=t2), start_time=esp / 2)
+        seq.add_event(delay, start_time=(loop_idx+0.5)*params.ESP)
 
-        # first echo
-        seq.add_event(evts.Echo(time=esp, echo_num=1), start_time=esp)
+        # echo
+        logModule.debug(f"echo: {loop_idx+1}")
+        echo = evts.Echo(time=(loop_idx+1)*params.ESP, echo_num=loop_idx+1)
+        seq.add_event(echo, start_time=(loop_idx+1)*params.ESP)
 
-        # iterate
-        for k in range(params.ETL - 1):
-            logModule.debug(f"echo: {k + 2}")
-
-            # delay
-            seq.add_event(evts.Relaxation(delay=esp / 2, t1=t1, t2=t2), start_time=esp * (k + 1))
-            # grad crushing
-            seq.add_event(evts.Grad(
-                moment=crusher_moment, duration=grad_duration),
-                start_time=(k + 1.5) * esp - grad_duration - rf_duration / 2
-            )
-
-            # refocusing
-            seq.add_event(evts.RF(
-                flip_angle=ref_fa, phase=ref_phase, duration=rf_duration),
-                start_time=(k + 1.5) * esp - rf_duration / 2
-            )
-            # grad crushing
-            seq.add_event(evts.Grad(
-                moment=crusher_moment, duration=grad_duration),
-                start_time=(k + 1.5) * esp + rf_duration / 2
-            )
-            # delay
-            seq.add_event(evts.Relaxation(delay=esp / 2, t1=t1, t2=t2), start_time=(k + 1.5) * esp)
-
-            # first echo
-            seq.add_event(evts.Echo(time=esp, echo_num=1), start_time=(k + 2) * esp)
-
-        return seq
+        # delay
+        seq.add_event(delay, start_time=params.ESP * (loop_idx + 1))
+    return seq

@@ -8,7 +8,7 @@ logModule = logging.getLogger(__name__)
 
 class Event:
     def __init__(self, duration: float):
-        self.duration: float = duration             # ms
+        self.duration: float = duration  # ms
         self._check_type()
 
     def _check_type(self):
@@ -43,13 +43,16 @@ class Event:
 
 
 class RF(Event):
-    def __init__(self, flip_angle: float, phase: float, duration: float):
+    def __init__(self, flip_angle: float, phase: float, duration: float, rephase_offset: float = 0.0):
         super().__init__(duration=duration)
         logModule.debug(f"create RF object: flip_angle {flip_angle:.1f}, phase {phase:.1f} \n"
-                       f"Ensure posting values in degrees!")
+                        f"Ensure posting values in degrees!")
         self.flip_angle = flip_angle
         self.phase = phase
         self._check_values()
+        # want to simulate for phase offsets created by the pulse
+        # (most noticeably insufficient rephasing of excitation)
+        self.rephase_offset: float = rephase_offset
 
         # convert to radians
         self.flip_angle, self.phase = np.radians([self.flip_angle, self.phase])
@@ -67,38 +70,77 @@ class RF(Event):
 
     def _process(self, q_mat: np.ndarray):
         # use rf rotation from left to matrix
-        return np.dot(self._operator(q_mat), q_mat)
+        result = np.dot(self._operator(q_mat), q_mat)
+        if self.rephase_offset > utils.GlobalValues().eps:
+            # we use the gradient shift operator to shift the phase states
+            result = Grad().create_rf_phase_shift(phase_shift=self.rephase_offset).process(result)
+        return result
 
 
 class Grad(Event):
-    def __init__(self, moment: float, duration: float = 1.0):
+    def __init__(self, shift: float = 0.0, duration: float = 1.0, moment: float = 0.0, amplitude: float = 0.0):
         super().__init__(duration=duration)
         self.duration: float = duration  # ms
-        self.moment: float = moment  # 1/m
-        self.amplitude: float = moment / utils.GlobalValues().gamma_hz / duration * 1e6  # T/m
+        self.phase_shift: float = shift
+        self.moment, self.amplitude = self._set_moment_amplitude(duration=duration, moment=moment, amplitude=amplitude)
 
     @classmethod
-    def create_rect_grad(cls, amplitude: float, duration: float, moment: float = 0.0):
-        # check timing provided in ms
-        if duration < 1.0:
+    def create_rect_grad(cls, duration: float,
+                         amplitude: float = 0.0, moment: float = 0.0,
+                         voxel_dim_extend: float = 1.0):
+        """
+
+        Parameters
+        ----------
+        amplitude: gradient amplitude in T/m (optional, either this or moment)
+        duration: gradient duration in ms
+        moment: gradient moment in 1/m (optional, either this or amplitude)
+        voxel_dim_extend: if no moment is supplied the moment / dephasing effect is calculated across
+                            the voxel dim in mm, default - 1.0
+
+        Returns grad event
+        -------
+
+        """
+        moment, amplitude = cls()._set_moment_amplitude(duration=duration, moment=moment, amplitude=amplitude)
+        phase_shift = moment * voxel_dim_extend * 1e-3
+        return cls(shift=phase_shift, duration=duration, moment=moment, amplitude=amplitude)
+
+    @classmethod
+    def create_rf_phase_shift(cls, phase_shift: float = 0.0):
+        # if we set rf phase offsets
+        grad = cls(shift=phase_shift)
+        # set duration 0 after checkup
+        grad.duration = 0.0
+        return grad
+
+    @staticmethod
+    def _set_moment_amplitude(duration: float, moment: float = 0.0, amplitude: float = 0.0):
+        # check timing provided in ms (crusher etc might be as little as a few hundred us, set 100us as threshold here
+        if duration < 0.1:
             duration *= 1e3
             if duration < 1.0:
                 err = f"provide timing in ms"
                 logModule.error(err)
                 raise ValueError(err)
-        # if moment provided were good
-        if moment > utils.GlobalValues().eps:
-            return cls(moment=moment, duration=duration)
-        # if no amplitude provided raise error
-        if amplitude < utils.GlobalValues().eps:
-            err = f"provide gradient moment or amplitude"
+        if duration < utils.GlobalValues().eps:
+            err = f"provide duration"
             logModule.error(err)
             raise ValueError(err)
-        moment = utils.GlobalValues().gamma_hz * amplitude * duration * 1e-3
-        return cls(moment=moment, duration=duration)
+        # if moment provided were good to calculate the amplitude
+        if moment > utils.GlobalValues().eps:
+            amplitude = np.divide(moment, utils.GlobalValues().gamma_hz * 1e-3 * duration)
+        elif amplitude < utils.GlobalValues().eps:
+            # no moment, no amplitude provided log in debug
+            deb = f"provide gradient moment or amplitude"
+            logModule.debug(deb)
+        else:
+            # calculate moment
+            moment = utils.GlobalValues().gamma_hz * amplitude * duration * 1e-3  # cast to sec
+        return moment, amplitude
 
     def _operator(self, q_mat: np.ndarray):
-        return op.grad_shift(self.moment, q_mat)
+        return op.grad_shift(self.phase_shift, q_mat)
 
     def _process(self, q_mat: np.ndarray):
         # shift operator already acts on q_mat, no dot product
@@ -116,7 +158,7 @@ class Relaxation(Event):
 
     def _check_values(self):
         if self.t1 < utils.GlobalValues().eps or self.t2 < utils.GlobalValues().eps:
-            err = f"provide nonzero t1 / t2! provided: {1e3*self.t1:.3f} ms / {1e3*self.t2:.3f} ms"
+            err = f"provide nonzero t1 / t2! provided: {1e3 * self.t1:.3f} ms / {1e3 * self.t2:.3f} ms"
             logModule.error(err)
             raise ValueError(err)
 
