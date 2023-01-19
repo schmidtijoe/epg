@@ -1,6 +1,6 @@
 import numpy as np
 import logging
-
+import utils
 logModule = logging.getLogger(__name__)
 
 
@@ -72,7 +72,7 @@ def relaxation(tau: float, t1: float, t2: float):
 # Gradient operator (S)
 def grad_shift(delta_k: float, omega: np.ndarray):
     # no shifting if small gradient values (0.0)
-    if delta_k < np.finfo(float).eps:
+    if delta_k < utils.GlobalValues().eps:
         return omega
 
     # we always round up to next integer value: want to calculate whole state shifts.
@@ -114,7 +114,7 @@ def grad_shift(delta_k: float, omega: np.ndarray):
 
     # we calculated the state.
     # if delta_k / dk = 1 -> delta k is whole state shift. nothing needed
-    if np.abs(interpolate_fraction - 1.0) < np.finfo(float).eps:
+    if np.abs(interpolate_fraction - 1.0) < utils.GlobalValues().eps:
         return tmp_result
 
     # else we need to interpolate the states

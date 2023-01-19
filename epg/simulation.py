@@ -1,6 +1,7 @@
 import numpy as np
 import logging
 import sequence
+import utils
 import tqdm
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
@@ -38,7 +39,7 @@ class EPG:
     def _check_q_size(self):
         # we just look if the last columns is different from 0 then we can suspect that
         # the matrix is filled all the way and more space would've been needed
-        if np.array(np.abs(self.q_matrix[:, -1]) > np.finfo(float).eps).any():
+        if np.array(np.abs(self.q_matrix[:, -1]) > utils.GlobalValues().eps).any():
             err = f"allocated q matrix completely filled"
             logModule.error(err)
             # handle
@@ -53,7 +54,7 @@ class EPG:
 
     def get_q_size(self) -> int:
         size = self.q_matrix.shape[-1] - 1
-        while not np.array(np.abs(self.q_matrix[:, size]) > np.finfo(float).eps).any():
+        while not np.array(np.abs(self.q_matrix[:, size]) > utils.GlobalValues().eps).any():
             size -= 1
         return size + 1
 
@@ -140,20 +141,20 @@ class EPG:
                                color=rf_color)
                 # plot state swaps
                 for n in range(last_state.matrix.shape[-1]):
-                    if np.abs(last_state.matrix[0, n]) > np.finfo(float).eps:
+                    if np.abs(last_state.matrix[0, n]) > utils.GlobalValues().eps:
                         # val = np.abs(tmp_state.matrix[0, n] - tmp_state.matrix[1, n])
                         ax_epg.plot(
                             time_array[start_idx:end_idx], np.linspace(n, -n, end_idx - start_idx),
                             color=rf_color
                         )
-                        if np.abs(tmp_state.matrix[0, n]) > np.finfo(float).eps:
+                        if np.abs(tmp_state.matrix[0, n]) > utils.GlobalValues().eps:
                             ax_epg.plot(
                                 time_array[start_idx:end_idx], np.linspace(n, n, end_idx - start_idx),
                                 linestyle="dashed",
                                 color=rf_color,
                                 alpha=0.6
                             )
-                    if np.abs(last_state.matrix[1, n]) > np.finfo(float).eps :
+                    if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps :
                         ax_epg.plot(
                             time_array[start_idx:end_idx], np.linspace(-n, -n, end_idx - start_idx),
                             linestyle="dashed",
@@ -182,28 +183,28 @@ class EPG:
                 shift = event.moment
                 if last_state.desc == "grad":
                     # in between
-                    if np.abs(last_state.matrix[0, 0]) > np.finfo(float).eps:
+                    if np.abs(last_state.matrix[0, 0]) > utils.GlobalValues().eps:
                         ax_epg.plot(time_array[last_idx:start_idx], np.linspace(0, 0, start_idx - last_idx),
                                     color=grad_color)
                     for n in np.arange(1, last_state.matrix.shape[-1]):
-                        if np.abs(last_state.matrix[0, n]) > np.finfo(float).eps:
+                        if np.abs(last_state.matrix[0, n]) > utils.GlobalValues().eps:
                             ax_epg.plot(time_array[last_idx:start_idx],
                                         np.linspace(n, n, start_idx - last_idx),
                                         color=grad_color, linestyle="dashed")
-                        if np.abs(last_state.matrix[1, n]) > np.finfo(float).eps:
+                        if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps:
                             ax_epg.plot(time_array[last_idx:start_idx],
                                         np.linspace(-n, -n, start_idx - last_idx),
                                         color=grad_color, linestyle="dashed")
 
                 # plot epg
-                if np.abs(tmp_state.matrix[0, 0]) > np.finfo(float).eps:
+                if np.abs(tmp_state.matrix[0, 0]) > utils.GlobalValues().eps:
                     ax_epg.plot(time_array[start_idx:end_idx], np.linspace(- shift, 0, end_idx - start_idx),
                                 color=grad_color)
                 for n in np.arange(1, tmp_state.get_state_size()):
-                    if np.abs(tmp_state.matrix[0, n]) > np.finfo(float).eps:
+                    if np.abs(tmp_state.matrix[0, n]) > utils.GlobalValues().eps:
                         ax_epg.plot(time_array[start_idx:end_idx], np.linspace(n - shift, n, end_idx - start_idx),
                                     color=grad_color)
-                    if np.abs(tmp_state.matrix[1, n]) > np.finfo(float).eps:
+                    if np.abs(tmp_state.matrix[1, n]) > utils.GlobalValues().eps:
                         ax_epg.plot(time_array[start_idx:end_idx],
                                     np.linspace(-n - 1, -n - 1 + shift, end_idx - start_idx),
                                     color=grad_color)
@@ -232,15 +233,15 @@ class EPG:
 
         if last_state.desc == "grad":
             # in between
-            if np.abs(last_state.matrix[0, 0]) > np.finfo(float).eps:
+            if np.abs(last_state.matrix[0, 0]) > utils.GlobalValues().eps:
                 ax_epg.plot(time_array[last_idx:start_idx], np.linspace(0, 0, start_idx - last_idx),
                             color=grad_color)
             for n in np.arange(1, last_state.matrix.shape[-1]):
-                if np.abs(last_state.matrix[0, n]) > np.finfo(float).eps:
+                if np.abs(last_state.matrix[0, n]) > utils.GlobalValues().eps:
                     ax_epg.plot(time_array[last_idx:start_idx],
                                 np.linspace(n, n, start_idx - last_idx),
                                 color=grad_color, linestyle="dashed")
-                if np.abs(last_state.matrix[1, n]) > np.finfo(float).eps:
+                if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps:
                     ax_epg.plot(time_array[last_idx:start_idx],
                                 np.linspace(-n, -n, start_idx - last_idx),
                                 color=grad_color, linestyle="dashed")
@@ -290,7 +291,7 @@ class EPG:
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(levelname)s :: %(name)s -- %(message)s',
                         datefmt='%I:%M:%S', level=logging.INFO)
-    semc_seq = sequence.semc_sequence()
+    semc_seq = sequence.Sequence.create_semc()
     epg = EPG(semc_seq)
     epg.simulate()
     epg.plot_epg()

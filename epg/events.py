@@ -1,15 +1,14 @@
 import numpy as np
 import logging
 import operators as op
+import utils
 
 logModule = logging.getLogger(__name__)
 
 
 class Event:
     def __init__(self, duration: float):
-        # global settings for all events
-        self._gamma: float = 42577478.518    # Hz/T
-        self.duration: float = duration          # ms
+        self.duration: float = duration             # ms
         self._check_type()
 
     def _check_type(self):
@@ -76,7 +75,27 @@ class Grad(Event):
         super().__init__(duration=duration)
         self.duration: float = duration  # ms
         self.moment: float = moment  # 1/m
-        self.amplitude: float = moment / self._gamma / duration * 1e6  # T/m
+        self.amplitude: float = moment / utils.GlobalValues().gamma_hz / duration * 1e6  # T/m
+
+    @classmethod
+    def create_rect_grad(cls, amplitude: float, duration: float, moment: float = 0.0):
+        # check timing provided in ms
+        if duration < 1.0:
+            duration *= 1e3
+            if duration < 1.0:
+                err = f"provide timing in ms"
+                logModule.error(err)
+                raise ValueError(err)
+        # if moment provided were good
+        if moment > utils.GlobalValues().eps:
+            return cls(moment=moment, duration=duration)
+        # if no amplitude provided raise error
+        if amplitude < utils.GlobalValues().eps:
+            err = f"provide gradient moment or amplitude"
+            logModule.error(err)
+            raise ValueError(err)
+        moment = utils.GlobalValues().gamma_hz * amplitude * duration * 1e-3
+        return cls(moment=moment, duration=duration)
 
     def _operator(self, q_mat: np.ndarray):
         return op.grad_shift(self.moment, q_mat)
@@ -96,7 +115,7 @@ class Relaxation(Event):
         self._check_values()
 
     def _check_values(self):
-        if self.t1 < np.finfo(float).eps or self.t2 < np.finfo(float).eps:
+        if self.t1 < utils.GlobalValues().eps or self.t2 < utils.GlobalValues().eps:
             err = f"provide nonzero t1 / t2! provided: {1e3*self.t1:.3f} ms / {1e3*self.t2:.3f} ms"
             logModule.error(err)
             raise ValueError(err)
