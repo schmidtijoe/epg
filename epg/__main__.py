@@ -14,7 +14,8 @@ import sequence
 import simulation
 
 logging.getLogger('matplotlib.font_manager').disabled = True
-logging.getLogger('simple_parsing').disabled = True
+logging.getLogger('simple_parsing.wrappers').disabled = True
+logging.getLogger('simple_parsing.help_formatter').disabled = True
 
 
 def main(prog_opts: opt.Config):
