@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import matplotlib.colors as mpc
 import matplotlib.patheffects as path_effects
+import matplotlib as mpl
 
 logModule = logging.getLogger(__name__)
 
@@ -92,6 +93,7 @@ class EPG:
         echo_array = np.full_like(time_array, np.nan)
 
         # plotting
+        mpl.rcParams['lines.linewidth'] = 2
         fig = plt.figure(figsize=(12, 8))
         gs = fig.add_gridspec(2, 1, height_ratios=[2.5, 1])
         ax_epg = fig.add_subplot(gs[0])
@@ -104,6 +106,7 @@ class EPG:
         # set up arrays needed to plot
         # get color mapping
         vmax = -1
+        max_shift = 6
         for state_idx in range(self.history_len):
             state = self.get_history_state(state_idx)
             if state.desc == "echo":
@@ -111,9 +114,14 @@ class EPG:
                 m = np.max(val)
                 if m > vmax:
                     vmax = m
+            if state.desc == "grad":
+                event, _ = self.seq.get_event(state_idx-1)
+                shift_val = event.phase_shift
+                if shift_val > max_shift:
+                    max_shift = int(np.ceil(np.abs(shift_val)))
         norm = mpc.Normalize(vmin=0.0, vmax=1.2 * vmax, clip=True)
         mapper = cm.ScalarMappable(norm=norm, cmap=cm.gist_heat)
-        color_lines = cm.nipy_spectral(np.linspace(0, 1, 2 * state_spread_size + 1))
+        color_lines = cm.nipy_spectral(np.linspace(0, 1, 2 * state_spread_size + max_shift + 1))
         cl_half = int(color_lines.__len__() / 2)
 
         # keep some indexes
@@ -187,11 +195,12 @@ class EPG:
             if tmp_state.desc == "grad":
                 # check for whole step shifts
                 shift = event.phase_shift
-                if np.abs(int(shift) - shift) > utils.GlobalValues().eps:
+                if np.abs(shift % 1) > utils.GlobalValues().eps:
                     fractional_shift = True
                 else:
                     fractional_shift = False
-                shift = np.ceil(shift)
+                shift_up = int(np.ceil(shift))
+                shift_remain = int(np.floor(shift))
                 # plot lines in between gradients
                 if last_state.desc == "grad":
                     # in between
@@ -208,20 +217,20 @@ class EPG:
                 # plot epg gradient shift
                 for n in range(last_state.get_state_size()):
                     if np.abs(last_state.matrix[0, n]) > utils.GlobalValues().eps:
-                        ax_epg.plot(time_array[start_idx:end_idx], np.linspace(n, n + shift, end_idx - start_idx),
-                                    color=color_lines[cl_half + n + 1])
+                        ax_epg.plot(time_array[start_idx:end_idx], np.linspace(n, n + shift_up, end_idx - start_idx),
+                                    color=color_lines[cl_half + n + shift_up])
                         if fractional_shift:
                             # fraction of state remains
-                            ax_epg.plot(time_array[start_idx:end_idx], np.linspace(n, n, end_idx - start_idx),
-                                        color=grad_color, linestyle='dotted', alpha=0.7)
+                            ax_epg.plot(time_array[start_idx:end_idx], np.linspace(n, n + shift_remain, end_idx - start_idx),
+                                        color=color_lines[cl_half + n + shift_remain], linestyle='dotted', alpha=0.9)
                     if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps and n > 0:
                         ax_epg.plot(time_array[start_idx:end_idx],
-                                    np.linspace(-n, -n + shift, end_idx - start_idx),
-                                    color=color_lines[cl_half - n + 1])
+                                    np.linspace(-n, -n + shift_up, end_idx - start_idx),
+                                    color=color_lines[cl_half - n + shift_up])
                         if fractional_shift:
                             # fraction of state remains
-                            ax_epg.plot(time_array[start_idx:end_idx], np.linspace(-n, -n, end_idx - start_idx),
-                                        color=grad_color, linestyle='dotted', alpha=0.7)
+                            ax_epg.plot(time_array[start_idx:end_idx], np.linspace(-n, -n + shift_remain, end_idx - start_idx),
+                                        color=color_lines[cl_half - n + shift_remain], linestyle='dotted', alpha=0.9)
                 # plot seq
                 val = - 0.6 * event.phase_shift
                 ramp_idx = int((end_idx - start_idx) / 8)
