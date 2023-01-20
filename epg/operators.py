@@ -77,13 +77,15 @@ def grad_shift(delta_k: float, omega: np.ndarray):
 
     # we always round up to next integer value: want to calculate whole state shifts.
     # if gradient moment doesnt allow for whole state shift we take the next highest and
-    # extrapolate the state afterwards
+    # extrapolate the state afterwards between the lowest full shifted state and the next highest shif
     dk = np.ceil(delta_k)
+    dk_before = np.floor(delta_k)
     # calculate how we overestimate the state, this fraction of the state we are using later
-    interpolate_fraction = delta_k / dk
+    interpolate_fraction = delta_k % 1
     dk = int(dk)    # cast
+    dk_before = int(dk_before)
 
-    # define shift
+    # define shifts
     def shift_right(arr_ax, int_shift):
         tmp = np.empty_like(arr_ax, dtype=complex)
         tmp[:int_shift] = 0.0
@@ -97,29 +99,42 @@ def grad_shift(delta_k: float, omega: np.ndarray):
         return tmp
 
     # only first two axis are shifted
-    tmp_result = np.empty_like(omega, dtype=complex)
-    if dk >= 0:
+    def pos_shift(init_state, delta_shift):
+        tmp_result = np.empty_like(init_state, dtype=complex)
         # plus states to the right, neg states to the left
-        tmp_result[0] = shift_right(omega[0], dk)
-        tmp_result[1] = shift_left(omega[1], dk)
+        tmp_result[0] = shift_right(init_state[0], delta_shift)
+        tmp_result[1] = shift_left(init_state[1], delta_shift)
         # fill zeroth state of plus
         tmp_result[0, 0] = np.conjugate(tmp_result[1, 0])
-    else:
-        # plus states to left, neg states to right
-        tmp_result[0] = shift_left(omega[0], np.abs(dk))
-        tmp_result[1] = shift_right(omega[1], np.abs(dk))
-        # fill zeroth state of minus
-        tmp_result[1, 0] = np.conjugate(tmp_result[0, 0])
-    tmp_result[2] = omega[2]
-
-    # we calculated the state.
-    # if delta_k / dk = 1 -> delta k is whole state shift. nothing needed
-    if np.abs(interpolate_fraction - 1.0) < utils.GlobalValues().eps:
+        tmp_result[2] = init_state[2]
         return tmp_result
 
-    # else we need to interpolate the states
-    interp_result = omega + interpolate_fraction * np.subtract(tmp_result, omega)
-    return interp_result
+    def neg_shift(init_state, delta_shift):
+        tmp_result = np.empty_like(init_state, dtype=complex)
+        # plus states to left, neg states to right
+        tmp_result[0] = shift_left(init_state[0], np.abs(delta_shift))
+        tmp_result[1] = shift_right(init_state[1], np.abs(delta_shift))
+        # fill zeroth state of minus
+        tmp_result[1, 0] = np.conjugate(tmp_result[0, 0])
+        tmp_result[2] = init_state[2]
+        return tmp_result
+
+    if dk_before >= 0:
+        tmp_state = pos_shift(omega, dk_before)
+    else:
+        tmp_state = neg_shift(omega, np.abs(dk_before))
+
+    # we calculated the biggest included whole integer state.
+    # if actual fractional shift value is above this, we calculate the next state and interpolate,
+    # shift between those can only be 1
+    if np.abs(interpolate_fraction) > utils.GlobalValues().eps:
+        if dk - dk_before > 0:
+            interpolate_state = pos_shift(tmp_state, 1)
+        else:
+            interpolate_state = neg_shift(tmp_state, 1)
+        tmp_state += interpolate_fraction * np.subtract(interpolate_state, tmp_state)
+
+    return tmp_state
 
 
 if __name__ == '__main__':
