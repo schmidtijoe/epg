@@ -45,12 +45,12 @@ class SeqParamsSEMC(Serializable):
     excitationDuration: float = 2.0             # [ms]
     # excitationGradRephase: float = 20.0         # [mT/m]
     # excitationGradReDuration: float = 0.8       # [ms]
-    excitationRephaseOffset: float = 0.0        # [°]
+    excitationRephaseOffset: float = 200.0        # [°]
 
-    refocusingFA: List = dc.field(default_factory=lambda: [180.0])          # [°]
+    refocusingFA: List = dc.field(default_factory=lambda: [140.0])          # [°]
     refocusingRfPhase: List = dc.field(default_factory=lambda: [0.0])       # [°]
     refocusingDuration: float = 3.0             # [ms]
-    refocusingGradCrusher: float = 1.5          # [mT/m] if smaller than 4.1 it is taken as the moment / shift already
+    refocusingGradCrusher: float = 1            # [mT/m] if smaller than 4.1 it is taken as the moment / shift already
     refocusingGradCrusherAdjustT: bool = True   # adjust timing to reach shortest duration without
     # passing 39.0 mT/m grad amplitude
     refocusingGradCrushDuration: float = 0.85   # [ms]

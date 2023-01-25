@@ -45,7 +45,7 @@ def rf_rotation(flip_angle: float, phase: float):
 
 
 # Relaxation operator (E)
-def relaxation(tau: float, t1: float, t2: float):
+def relaxation(tau: float, t1: float, t2: float, omega: np.ndarray):
     """
 
     Parameters
@@ -53,7 +53,6 @@ def relaxation(tau: float, t1: float, t2: float):
     tau: time for relaxation [s]
     t1: t1 param [s]
     t2: t2 param [s]
-    omega:
 
     Returns
     -------
@@ -66,7 +65,9 @@ def relaxation(tau: float, t1: float, t2: float):
         [0, e2, 0],
         [0, 0, e1]
     ])
-    return rel_mat
+    tmp_result = np.dot(rel_mat, omega)
+    tmp_result[:, 0] += np.array([0, 0, 1 - e1])
+    return tmp_result
 
 
 # Gradient operator (S)
@@ -82,50 +83,43 @@ def grad_shift(delta_k: float, omega: np.ndarray):
 
     """
     # no shifting if small gradient values (0.0)
-    if delta_k < utils.GlobalValues().eps:
+    if np.abs(delta_k) < utils.GlobalValues().eps:
         return omega
 
     # we always round up to next grid value: want to calculate whole state shifts.
     dk = int(np.round(delta_k))
 
-    # define shifts
-    def shift_right(arr_ax, int_shift):
-        tmp = np.empty_like(arr_ax, dtype=complex)
-        tmp[:int_shift] = 0.0
-        tmp[int_shift:] = arr_ax[:-int_shift]
-        return tmp
-
-    def shift_left(arr_ax, int_shift):
-        tmp = np.empty_like(arr_ax, dtype=complex)
-        tmp[-int_shift:] = 0.0
-        tmp[:-int_shift] = arr_ax[int_shift:]
-        return tmp
+    # omega has dim [fn+, fn-, zn]
+    # however, when shifting we can walk from l- to k+ via shifts. hence we can not loose objects by shifting
 
     # only first two axis are shifted
     def pos_shift(init_state, delta_shift):
-        tmp_result = np.empty_like(init_state, dtype=complex)
-        # plus states to the right, neg states to the left
-        tmp_result[0] = shift_right(init_state[0], delta_shift)
-        tmp_result[1] = shift_left(init_state[1], delta_shift)
-        # fill zeroth state of plus
-        tmp_result[0, 0] = np.conjugate(tmp_result[1, 0])
+        tmp_result = np.zeros_like(init_state, dtype=complex)
+        # plus states to the right -> conjugate the filled in from minus states
+        tmp_result[0, :delta_shift] = np.conjugate(init_state[1, delta_shift:0:-1])
+        tmp_result[0, delta_shift:] = init_state[0, :-delta_shift]
+        # neg states to the left -> conjugate the filled in plus states
+        tmp_result[1, :-delta_shift] = init_state[1, delta_shift:]
+        # fill z states
         tmp_result[2] = init_state[2]
         return tmp_result
 
     def neg_shift(init_state, delta_shift):
-        tmp_result = np.empty_like(init_state, dtype=complex)
-        # plus states to left, neg states to right
-        tmp_result[0] = shift_left(init_state[0], np.abs(delta_shift))
-        tmp_result[1] = shift_right(init_state[1], np.abs(delta_shift))
-        # fill zeroth state of minus
-        tmp_result[1, 0] = np.conjugate(tmp_result[0, 0])
+        delta_shift = np.abs(delta_shift).astype(int)
+        tmp_result = np.zeros_like(init_state, dtype=complex)
+        # plus states to left
+        tmp_result[0, :-delta_shift] = init_state[0, delta_shift:]
+        # neg states to right, fill in from 0th conjugate
+        tmp_result[1, :delta_shift] = np.conjugate(init_state[0, delta_shift:0:-1])
+        tmp_result[1, delta_shift:] = init_state[1, :-delta_shift]
+        # fill z_states
         tmp_result[2] = init_state[2]
         return tmp_result
 
     if dk >= 0:
         tmp_state = pos_shift(omega, dk)
     else:
-        tmp_state = neg_shift(omega, np.abs(dk))
+        tmp_state = neg_shift(omega, dk)
 
     return tmp_state
 

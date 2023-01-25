@@ -49,13 +49,15 @@ class RF(Event):
                         f"Ensure posting values in degrees!")
         self.flip_angle = flip_angle
         self.phase = phase
+        self.rephase_offset: float = rephase_offset
         self._check_values()
         # want to simulate for phase offsets created by the pulse
         # (most noticeably insufficient rephasing of excitation)
-        self.rephase_offset: float = rephase_offset
 
         # convert to radians
-        self.flip_angle, self.phase = np.radians([self.flip_angle, self.phase])
+        self.flip_angle, self.phase, self.rephase_offset = np.radians(
+            [self.flip_angle, self.phase, self.rephase_offset]
+        )
 
     def _check_values(self):
         # catch bad values
@@ -63,6 +65,8 @@ class RF(Event):
             self.flip_angle -= np.sign(self.flip_angle) * 360.0
         while np.abs(self.phase) > 360.0:
             self.phase -= np.sign(self.phase) * 360.0
+        while np.abs(self.rephase_offset) > 360.0:
+            self.rephase_offset -= np.sign(self.rephase_offset) * 360.0
 
     def _operator(self, fn_mat: np.ndarray):
         # get rf matrix rotation
@@ -71,9 +75,10 @@ class RF(Event):
     def _process(self, q_mat: np.ndarray):
         # use rf rotation from left to matrix
         result = np.dot(self._operator(q_mat), q_mat)
-        if self.rephase_offset > utils.GlobalValues().eps:
-            # we use the gradient shift operator to shift the phase states
-            result = Grad().create_rf_phase_shift(phase_shift=self.rephase_offset).process(result)
+        if np.abs(self.rephase_offset) > utils.GlobalValues().eps:
+            # we use the gradient shift operator to shift the phase states, accepts the shift
+            # cast from offset [rad] to shift
+            result = Grad().create_rf_phase_shift(phase_shift=self.rephase_offset/2/np.pi).process(result)
         return result
 
 
@@ -149,7 +154,7 @@ class Grad(Event):
         return moment / amplitude / utils.GlobalValues().gamma_hz * 1e3
 
     def _operator(self, q_mat: np.ndarray):
-        return op.grad_shift(self.phase_shift, q_mat)
+        return op.grad_shift(utils.GlobalValues().grad_shift_raster_factor*self.phase_shift, q_mat)
 
     def _process(self, q_mat: np.ndarray):
         # shift operator already acts on q_mat, no dot product
@@ -172,10 +177,10 @@ class Relaxation(Event):
             raise ValueError(err)
 
     def _operator(self, q_mat: np.ndarray):
-        return op.relaxation(self.duration, self.t1, self.t2)
+        return op.relaxation(self.duration, self.t1, self.t2, q_mat)
 
     def _process(self, q_mat: np.ndarray):
-        return np.dot(self._operator(q_mat), q_mat)
+        return self._operator(q_mat)
 
 
 class Echo(Event):

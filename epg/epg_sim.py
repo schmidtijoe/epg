@@ -27,7 +27,9 @@ class EPG:
         etl = seq.params.ETL
         self.seq = seq
         # need the matrix to be 3 x n  to multiply operators from the left
-        self.q_matrix = np.zeros([3, etl ** 2], dtype=complex)  # we initialize the fn states with a size of etl**2
+        self.q_matrix = np.zeros([3, etl ** 2 * utils.GlobalValues().grad_shift_raster_factor], dtype=complex)
+        self.state_size: int = 1
+        # we initialize the fn states with a size of etl**2 * grad shift raster
         # need checks to see if this is enough
         # the advantage is preallocate space and no need to concat and stack the matrices
 
@@ -46,19 +48,26 @@ class EPG:
             logModule.error(err)
             # handle
             logModule.debug(f"adjusting size + 5")
-            self.q_matrix = np.concatenate([self.q_matrix, np.zeros([3, 5])], axis=-1)
+            self.q_matrix = np.concatenate(
+                [self.q_matrix, np.zeros([3, 5 * utils.GlobalValues().grad_shift_raster_factor])],
+                axis=-1
+            )
 
     def _add_to_history(self, desc: str, time: float, duration: float):
         size = self.get_q_size()
+        self._check_q_size()
         tmp_state = self.TempState(matrix=self.q_matrix[:, :size], start_time=time, duration=duration, desc=desc)
         self.q_history.append(tmp_state)
         self.history_len += 1
 
     def get_q_size(self) -> int:
-        size = self.q_matrix.shape[-1] - 1
-        while not np.array(np.abs(self.q_matrix[:, size]) > utils.GlobalValues().eps).any():
-            size -= 1
-        return size + 1
+        idxs = np.argwhere(np.abs(self.q_matrix) > utils.GlobalValues().eps)[:, 1]
+        # first dim is elements found, second is the index,
+        # we dont need to know whether its x,y, or z dim. just want the highest n state
+        size = np.max(idxs) + 1
+        if size > self.state_size:
+            self.state_size = size
+        return self.state_size
 
     def get_history(self) -> list:
         return self.q_history
@@ -83,6 +92,7 @@ class EPG:
     def plot_epg(self, save: str = None):
         plt.style.use('ggplot')
         rf_color = '#5c25ba'
+        rf_color_2 = '#b300b3'
         grad_color = '#25baa6'
         state_spread_size = self.get_q_size()
         num_samples = 2000
@@ -115,7 +125,7 @@ class EPG:
                 if m > vmax:
                     vmax = m
             if state.desc == "grad":
-                event, _ = self.seq.get_event(state_idx-1)
+                event, _ = self.seq.get_event(state_idx - 1)
                 shift_val = event.phase_shift
                 if shift_val > max_shift:
                     max_shift = int(np.ceil(np.abs(shift_val)))
@@ -169,11 +179,34 @@ class EPG:
                             )
                     if np.abs(last_state.matrix[1, n]) > utils.GlobalValues().eps:
                         ax_epg.plot(
-                            time_array[start_idx:end_idx], np.linspace(-n, -n, end_idx - start_idx),
+                            time_array[start_idx:end_idx], np.linspace(-n, n, end_idx - start_idx),
+                            linestyle="dashed",
+                            color=rf_color_2,
+                            alpha=0.8
+                        )
+                        if np.abs(tmp_state.matrix[1, n]) > utils.GlobalValues().eps:
+                            ax_epg.plot(
+                                time_array[start_idx:end_idx], np.linspace(-n, -n, end_idx - start_idx),
+                                linestyle="dashed",
+                                color=rf_color_2,
+                                alpha=0.6
+                            )
+                    if np.abs(tmp_state.matrix[1, n]) > utils.GlobalValues().eps and np.abs(
+                            tmp_state.matrix[0, n]) > utils.GlobalValues().eps:
+                        mid_idx = start_idx + int((end_idx - start_idx) / 2)
+                        ax_epg.plot(
+                            time_array[mid_idx:end_idx], np.linspace(0, n, end_idx - mid_idx),
                             linestyle="dashed",
                             color=rf_color,
                             alpha=0.6
                         )
+                        ax_epg.plot(
+                            time_array[mid_idx:end_idx], np.linspace(0, - n, end_idx - mid_idx),
+                            linestyle="dashed",
+                            color=rf_color,
+                            alpha=0.6
+                        )
+
                 # plot midline state extend y
                 ax_epg.vlines(
                     time_array[start_idx + int((end_idx - start_idx) / 2)],
@@ -194,7 +227,7 @@ class EPG:
 
             if tmp_state.desc == "grad":
                 # check for whole step shifts
-                shift = event.phase_shift
+                shift = event.phase_shift * utils.GlobalValues().grad_shift_raster_factor
 
                 shift = int(np.round(shift))
                 # plot lines in between gradients
@@ -273,6 +306,11 @@ class EPG:
 
         ax_seq.set_xlim(time_array[0], time_array[last_rf_idx])
         ax_epg.set_xlim(time_array[0], time_array[last_rf_idx])
+
+        def scale_to_int_states(state_num, tick_num):
+            return f"{int(np.round(state_num / utils.GlobalValues().grad_shift_raster_factor))}"
+
+        ax_epg.yaxis.set_major_formatter(plt.FuncFormatter(scale_to_int_states))
         plt.tight_layout()
         if save:
             plt.savefig(save, bbox_inches='tight')
@@ -306,7 +344,7 @@ class EPG:
         # ax.set_xlim(0, echo_times[-1]+np.diff(echo_times)[-1])
 
         ax.plot(echo_times, echo_vals, color=color)
-        ax.annotate("excitation efficiency", (np.diff(echo_times)[0]/4, echo_vals[0]), color=color_2)
+        ax.annotate("excitation efficiency", (np.diff(echo_times)[0] / 4, echo_vals[0]), color=color_2)
         ax.scatter(echo_times[0], echo_vals[0], color=color_2)
         ax.scatter(echo_times[1:], echo_vals[1:], color=color, marker='o')
 
