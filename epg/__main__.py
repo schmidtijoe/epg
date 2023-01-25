@@ -11,7 +11,7 @@ Jochen Schmidt, 19.01.2023
 import logging
 import options as opt
 import sequence
-import simulation
+import epg_sim
 
 logging.getLogger('matplotlib.font_manager').disabled = True
 logging.getLogger('simple_parsing.wrappers').disabled = True
@@ -20,12 +20,12 @@ logging.getLogger('simple_parsing.help_formatter').disabled = True
 
 def main(prog_opts: opt.Config):
     semc_seq = sequence.create_semc(params=prog_opts.params)
-    epg = simulation.EPG(semc_seq)
+    epg = epg_sim.EPG(semc_seq)
     logging.info("Start Simulation")
     epg.simulate()
     logging.info("Finished \nPlotting")
-    epg.plot_epg()
-    epg.plot_echoes()
+    epg.plot_epg(save='epg_nonint_crusher_shifts.png')
+    epg.plot_echoes(save='echos_nonint_crusher_shifts.png')
 
 
 if __name__ == '__main__':

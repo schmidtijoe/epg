@@ -79,7 +79,7 @@ class EPG:
             self._add_to_history(desc=f"{event_type}", time=timing, duration=event.duration)
         logModule.info("__ finished! __")
 
-    def plot_epg(self):
+    def plot_epg(self, save: str = None):
         plt.style.use('ggplot')
         rf_color = '#5c25ba'
         grad_color = '#25baa6'
@@ -277,9 +277,11 @@ class EPG:
         ax_seq.set_xlim(time_array[0], time_array[last_rf_idx])
         ax_epg.set_xlim(time_array[0], time_array[last_rf_idx])
         plt.tight_layout()
+        if save:
+            plt.savefig(save, bbox_inches='tight')
         plt.show()
 
-    def plot_echoes(self):
+    def plot_echoes(self, save: str = None):
         # variables
         plt.style.use('ggplot')
         color = '#5c25ba'
@@ -311,13 +313,15 @@ class EPG:
         ax.scatter(echo_times[0], echo_vals[0], color=color_2)
         ax.scatter(echo_times[1:], echo_vals[1:], color=color, marker='o')
 
+        if save:
+            plt.savefig(save, bbox_inches='tight')
         plt.show()
 
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s %(levelname)s :: %(name)s -- %(message)s',
                         datefmt='%I:%M:%S', level=logging.INFO)
-    semc_seq = sequence.Sequence.create_semc()
+    semc_seq = sequence.create_semc()
     epg = EPG(semc_seq)
     epg.simulate()
     epg.plot_epg()
