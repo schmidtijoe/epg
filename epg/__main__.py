@@ -24,8 +24,8 @@ def main(prog_opts: opt.Config):
     logging.info("Start Simulation")
     epg.simulate()
     logging.info("Finished \nPlotting")
-    epg.plot_epg(save='epg_nonint_crusher_shifts.png')
-    epg.plot_echoes(save='echos_nonint_crusher_shifts.png')
+    epg.plot_epg(save='test/epg_nonint_crusher_shifts.png')
+    epg.plot_echoes(save='test/echos_nonint_crusher_shifts.png')
 
 
 if __name__ == '__main__':

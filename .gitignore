@@ -4,3 +4,6 @@
 
 # python cache
 **/__pycache__/
+
+# testing and example builds
+/test/

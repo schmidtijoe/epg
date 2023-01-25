@@ -71,19 +71,22 @@ def relaxation(tau: float, t1: float, t2: float):
 
 # Gradient operator (S)
 def grad_shift(delta_k: float, omega: np.ndarray):
+    """
+    Parameters
+    ----------
+    delta_k
+    omega
+
+    Returns
+    -------
+
+    """
     # no shifting if small gradient values (0.0)
     if delta_k < utils.GlobalValues().eps:
         return omega
 
-    # we always round up to next integer value: want to calculate whole state shifts.
-    # if gradient moment doesnt allow for whole state shift we take the next highest and
-    # extrapolate the state afterwards between the lowest full shifted state and the next highest shif
-    dk = np.ceil(delta_k)
-    dk_before = np.floor(delta_k)
-    # calculate how we overestimate the state, this fraction of the state we are using later
-    interpolate_fraction = delta_k % 1
-    dk = int(dk)    # cast
-    dk_before = int(dk_before)
+    # we always round up to next grid value: want to calculate whole state shifts.
+    dk = int(np.round(delta_k))
 
     # define shifts
     def shift_right(arr_ax, int_shift):
@@ -119,20 +122,10 @@ def grad_shift(delta_k: float, omega: np.ndarray):
         tmp_result[2] = init_state[2]
         return tmp_result
 
-    if dk_before >= 0:
-        tmp_state = pos_shift(omega, dk_before)
+    if dk >= 0:
+        tmp_state = pos_shift(omega, dk)
     else:
-        tmp_state = neg_shift(omega, np.abs(dk_before))
-
-    # we calculated the biggest included whole integer state.
-    # if actual fractional shift value is above this, we calculate the next state and interpolate,
-    # shift between those can only be 1
-    if np.abs(interpolate_fraction) > utils.GlobalValues().eps:
-        if dk - dk_before > 0:
-            interpolate_state = pos_shift(tmp_state, 1)
-        else:
-            interpolate_state = neg_shift(tmp_state, 1)
-        tmp_state += interpolate_fraction * np.subtract(interpolate_state, tmp_state)
+        tmp_state = neg_shift(omega, np.abs(dk))
 
     return tmp_state
 
